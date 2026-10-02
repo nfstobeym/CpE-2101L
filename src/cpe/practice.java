@@ -1,5 +1,5 @@
 package cpe;
 
-public class practice {
+public class practice { hello world
 
 }
