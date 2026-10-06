@@ -2,10 +2,21 @@ package cpe;
 
 import java.util.Scanner;
 
+
 public class practice {
     
     public static void main(String[] args) {
-        System.out.println("Code successfully pulled from GitHub!");
-        System.out.println("-------------------------------------");
-        adhqwhdhqwidhbqwidqwbidbwqiudbqiuwdbiwuqbdwqbiduqwidbiuwqbdwqdwqdwqd
+    	
+    	int myAge = 17;
+    	int votingAge = 18;
+
+    	if (myAge >= votingAge) {
+    	  System.out.println("Old enough to vote!");
+    	} else {
+    	  System.out.println("Not old enough to vote.");
+    	}
+    	//*Hello Hello*//
+
     }
+       
+}
