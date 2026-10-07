@@ -14,461 +14,520 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
-public class AirFryerSimulator extends Application {
+public class AirFryerSystem extends Application {
 
-    String[] options = {"ON", "OFF", "TIMER", "TEMP", "FRY"};
+    String[] choices = {"ON", "OFF", "TIMER", "TEMP", "FRY"};
 
-    int currentOption = 0;
-    int selectedTime = 1;
-    int selectedTemp = 80;
-    int timeLeft;
+    int choiceIndex = 0;
+    int setTime = 1;
+    int setTemperature = 80;
+    int remaining = 0;
+    int heaterTemperature = 25;
 
-    boolean plugged = false;
-    boolean basketReady = false;
-    boolean powered = false;
-    boolean timeConfirmed = false;
-    boolean tempConfirmed = false;
-    boolean cooking = false;
-    boolean blueScreen = false;
+    boolean cordIn = false;
+    boolean basketIn = false;
+    boolean turnedOn = false;
+    boolean timerReady = false;
+    boolean temperatureReady = false;
+    boolean adjusting = false;
+    boolean running = false;
+    boolean flashBlue = false;
 
-    Label topScreen = new Label();
-    Label bottomScreen = new Label();
-    Label fanStatus = new Label("Fan: OFF");
-    Label heatStatus = new Label("Heater: OFF");
+    Label modeText = new Label();
+    Label valueText = new Label();
+    Label fanText = new Label("Fan: OFF");
+    Label heaterText = new Label("Heater: OFF");
 
-    VBox screen = new VBox();
+    VBox screenPanel = new VBox();
 
-    Timeline countdown;
-    Timeline blinking;
+    Timeline cookingClock;
+    Timeline warningClock;
 
     @Override
     public void start(Stage stage) {
 
-        Label heading = new Label("AIR FRYER SIMULATOR");
-        heading.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
+        Label heading = new Label("AIR FRYER");
+        heading.setStyle("-fx-font-size: 25px; -fx-font-weight: bold;");
 
-        setupScreen();
+        buildScreen();
 
-        Button decrease = new Button("-");
-        Button powerSelect = new Button("PWR/SEL");
-        Button increase = new Button("+");
+        Button previousButton = new Button("-");
+        Button selectButton = new Button("PWR/SEL");
+        Button nextButton = new Button("+");
 
-        decrease.setPrefSize(80, 50);
-        powerSelect.setPrefSize(100, 50);
-        increase.setPrefSize(80, 50);
+        previousButton.setPrefSize(80, 50);
+        selectButton.setPrefSize(100, 50);
+        nextButton.setPrefSize(80, 50);
 
-        ToggleButton plugSwitch = new ToggleButton("Power Cord: OUT");
-        ToggleButton basketSwitch = new ToggleButton("Basket: OUT");
+        ToggleButton cordButton = new ToggleButton("Cord: OUT");
+        ToggleButton basketButton = new ToggleButton("Basket: OUT");
 
-        plugSwitch.setPrefWidth(160);
-        basketSwitch.setPrefWidth(160);
+        cordButton.setPrefWidth(150);
+        basketButton.setPrefWidth(150);
 
-        decrease.setOnAction(e -> pressMinus());
-        increase.setOnAction(e -> pressPlus());
-        powerSelect.setOnAction(e -> chooseOption());
+        previousButton.setOnAction(e -> controlPressed(-1));
+        nextButton.setOnAction(e -> controlPressed(1));
+        selectButton.setOnAction(e -> selectCurrent());
 
-        plugSwitch.setOnAction(e -> {
-            plugged = plugSwitch.isSelected();
+        cordButton.setOnAction(e -> {
 
-            if (plugged) {
-                plugSwitch.setText("Power Cord: IN");
+            cordIn = cordButton.isSelected();
+
+            if (cordIn) {
+                cordButton.setText("Cord: IN");
             } else {
-                plugSwitch.setText("Power Cord: OUT");
-
-                if (powered) {
-                    shutDown();
-                }
+                cordButton.setText("Cord: OUT");
+                stopIfNeeded();
             }
         });
 
-        basketSwitch.setOnAction(e -> {
-            basketReady = basketSwitch.isSelected();
+        basketButton.setOnAction(e -> {
 
-            if (basketReady) {
-                basketSwitch.setText("Basket: IN");
+            basketIn = basketButton.isSelected();
+
+            if (basketIn) {
+                basketButton.setText("Basket: IN");
             } else {
-                basketSwitch.setText("Basket: OUT");
-
-                if (powered) {
-                    shutDown();
-                }
+                basketButton.setText("Basket: OUT");
+                stopIfNeeded();
             }
         });
 
-        HBox buttons = new HBox(10);
-        buttons.getChildren().addAll(decrease, powerSelect, increase);
-        buttons.setAlignment(Pos.CENTER);
-
-        HBox switches = new HBox(10);
-        switches.getChildren().addAll(plugSwitch, basketSwitch);
-        switches.setAlignment(Pos.CENTER);
-
-        HBox machineStatus = new HBox(30);
-        machineStatus.getChildren().addAll(fanStatus, heatStatus);
-        machineStatus.setAlignment(Pos.CENTER);
-
-        VBox layout = new VBox(20);
-        layout.getChildren().addAll(
-                heading,
-                screen,
-                buttons,
-                switches,
-                machineStatus
+        HBox mainControls = new HBox(
+                10,
+                previousButton,
+                selectButton,
+                nextButton
         );
 
-        layout.setAlignment(Pos.CENTER);
-        layout.setPadding(new Insets(30));
+        mainControls.setAlignment(Pos.CENTER);
 
-        Scene scene = new Scene(layout, 450, 400);
+        HBox connectionControls = new HBox(
+                10,
+                cordButton,
+                basketButton
+        );
 
-        stage.setTitle("Air Fryer");
+        connectionControls.setAlignment(Pos.CENTER);
+
+        HBox machineInfo = new HBox(
+                30,
+                fanText,
+                heaterText
+        );
+
+        machineInfo.setAlignment(Pos.CENTER);
+
+        VBox root = new VBox(
+                20,
+                heading,
+                screenPanel,
+                mainControls,
+                connectionControls,
+                machineInfo
+        );
+
+        root.setAlignment(Pos.CENTER);
+        root.setPadding(new Insets(30));
+
+        Scene scene = new Scene(root, 450, 400);
+
+        stage.setTitle("Air Fryer Simulation");
         stage.setScene(scene);
         stage.show();
 
-        showCurrentOption();
+        refreshScreen();
     }
 
-    public void setupScreen() {
+    public void buildScreen() {
 
-        topScreen.setMaxWidth(Double.MAX_VALUE);
-        bottomScreen.setMaxWidth(Double.MAX_VALUE);
+        modeText.setMaxWidth(Double.MAX_VALUE);
+        valueText.setMaxWidth(Double.MAX_VALUE);
 
-        topScreen.setAlignment(Pos.CENTER_LEFT);
-        bottomScreen.setAlignment(Pos.CENTER);
+        modeText.setAlignment(Pos.CENTER_LEFT);
+        valueText.setAlignment(Pos.CENTER);
 
-        topScreen.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
-        bottomScreen.setStyle("-fx-font-size: 26px; -fx-font-weight: bold;");
+        modeText.setStyle(
+                "-fx-font-size: 18px;" +
+                "-fx-font-weight: bold;"
+        );
 
-        screen.setPrefSize(300, 100);
-        screen.setPadding(new Insets(10));
+        valueText.setStyle(
+                "-fx-font-size: 27px;" +
+                "-fx-font-weight: bold;"
+        );
 
-        screen.getChildren().addAll(topScreen, bottomScreen);
+        screenPanel.setPrefSize(300, 100);
+        screenPanel.setPadding(new Insets(10));
 
-        yellowDisplay();
+        screenPanel.getChildren().addAll(
+                modeText,
+                valueText
+        );
+
+        changeScreenColor("yellow");
     }
 
-    public void pressPlus() {
+    public void controlPressed(int direction) {
 
-        String option = options[currentOption];
-
-        if (!cooking && powered && option.equals("TIMER")) {
-            increaseTimer();
-        } else if (!cooking && powered && option.equals("TEMP")) {
-            increaseTemperature();
-        } else {
-            moveOption(1);
-        }
-    }
-
-    public void pressMinus() {
-
-        String option = options[currentOption];
-
-        if (!cooking && powered && option.equals("TIMER")) {
-            decreaseTimer();
-        } else if (!cooking && powered && option.equals("TEMP")) {
-            decreaseTemperature();
-        } else {
-            moveOption(-1);
-        }
-    }
-
-    public void moveOption(int movement) {
-
-        currentOption += movement;
-
-        if (currentOption >= options.length) {
-            currentOption = 0;
-        }
-
-        if (currentOption < 0) {
-            currentOption = options.length - 1;
-        }
-
-        if (options[currentOption].equals("FRY") && !readyToFry()) {
-            moveOption(movement);
+        if (running) {
+            moveThroughMenu(direction);
             return;
         }
 
-        showCurrentOption();
-    }
-
-    public void showCurrentOption() {
-
-        String option = options[currentOption];
-
-        topScreen.setText(option);
-
-        if (cooking) {
-            bottomScreen.setText(timeLeft + " sec");
-            return;
-        }
-
-        switch (option) {
-
-            case "ON":
-                if (powered) {
-                    bottomScreen.setText("ON");
-                } else {
-                    bottomScreen.setText("OFF");
-                }
-                break;
-
-            case "OFF":
-                bottomScreen.setText("OFF");
-                break;
-
-            case "TIMER":
-                selectedTime = 1;
-                bottomScreen.setText(selectedTime + " sec");
-                break;
-
-            case "TEMP":
-                selectedTemp = 80;
-                bottomScreen.setText(selectedTemp + " °C");
-                break;
-
-            case "FRY":
-                bottomScreen.setText("FRY");
-                break;
+        if (adjusting) {
+            updateSetting(direction);
+        } else {
+            moveThroughMenu(direction);
         }
     }
 
-    public void chooseOption() {
+    public void moveThroughMenu(int direction) {
 
-        String choice = options[currentOption];
+        choiceIndex = choiceIndex + direction;
 
-        if (cooking) {
-            if (choice.equals("OFF")) {
-                shutDown();
+        if (choiceIndex > 4) {
+            choiceIndex = 0;
+        }
+
+        if (choiceIndex < 0) {
+            choiceIndex = 4;
+        }
+
+        if (choices[choiceIndex].equals("FRY")) {
+
+            if (!readyForCooking()) {
+                moveThroughMenu(direction);
+                return;
             }
+        }
+
+        refreshScreen();
+    }
+
+    public void refreshScreen() {
+
+        String selected = choices[choiceIndex];
+
+        modeText.setText(selected);
+
+        if (running) {
+            valueText.setText(remaining + " sec");
             return;
         }
 
-        switch (choice) {
+        switch (selected) {
 
             case "ON":
-                powerOn();
+                valueText.setText(turnedOn ? "ON" : "OFF");
                 break;
 
             case "OFF":
-                shutDown();
+                valueText.setText("OFF");
                 break;
 
             case "TIMER":
-                confirmTimer();
+                valueText.setText(setTime + " sec");
                 break;
 
             case "TEMP":
-                confirmTemperature();
+                valueText.setText(setTemperature + " °C");
                 break;
 
             case "FRY":
-                beginCooking();
+                valueText.setText("FRY");
                 break;
         }
     }
 
-    public void powerOn() {
+    public void selectCurrent() {
 
-        if (!plugged || !basketReady) {
-            bottomScreen.setText("CHECK PLUG/BASKET");
+        String selected = choices[choiceIndex];
+
+        if (running) {
+
+            if (selected.equals("OFF")) {
+                turnMachineOff();
+            }
+
             return;
         }
 
-        powered = true;
-
-        topScreen.setText("ON");
-        bottomScreen.setText("ON");
-
-        redDisplay();
-    }
-
-    public void confirmTimer() {
-
-        if (!powered) {
+        if (adjusting) {
+            saveAdjustment();
             return;
         }
 
-        timeConfirmed = true;
-        bottomScreen.setText(selectedTime + " sec SET");
+        switch (selected) {
 
-        goToFryIfReady();
+            case "ON":
+                tryTurningOn();
+                break;
+
+            case "OFF":
+                turnMachineOff();
+                break;
+
+            case "TIMER":
+                openTimerSetting();
+                break;
+
+            case "TEMP":
+                openTemperatureSetting();
+                break;
+
+            case "FRY":
+                beginFrying();
+                break;
+        }
     }
 
-    public void confirmTemperature() {
+    public void tryTurningOn() {
 
-        if (!powered) {
+        if (!cordIn || !basketIn) {
+            valueText.setText("CHECK CORD/BASKET");
             return;
         }
 
-        tempConfirmed = true;
-        bottomScreen.setText(selectedTemp + " °C SET");
+        turnedOn = true;
 
-        goToFryIfReady();
+        modeText.setText("ON");
+        valueText.setText("ON");
+
+        changeScreenColor("red");
     }
 
-    public void goToFryIfReady() {
+    public void openTimerSetting() {
 
-        if (readyToFry()) {
-            currentOption = 4;
-            topScreen.setText("");
-            bottomScreen.setText("FRY");
-        }
-    }
-
-    public boolean readyToFry() {
-        return powered && timeConfirmed && tempConfirmed;
-    }
-
-    public void increaseTimer() {
-
-        if (selectedTime < 60) {
-            selectedTime++;
-        }
-
-        bottomScreen.setText(selectedTime + " sec");
-    }
-
-    public void decreaseTimer() {
-
-        if (selectedTime > 1) {
-            selectedTime--;
-        }
-
-        bottomScreen.setText(selectedTime + " sec");
-    }
-
-    public void increaseTemperature() {
-
-        if (selectedTemp < 200) {
-            selectedTemp += 5;
-        }
-
-        bottomScreen.setText(selectedTemp + " °C");
-    }
-
-    public void decreaseTemperature() {
-
-        if (selectedTemp > 80) {
-            selectedTemp -= 5;
-        }
-
-        bottomScreen.setText(selectedTemp + " °C");
-    }
-
-    public void beginCooking() {
-
-        if (!readyToFry()) {
+        if (!turnedOn) {
             return;
         }
 
-        cooking = true;
-        timeLeft = selectedTime;
+        adjusting = true;
 
-        topScreen.setText("FRY");
-        bottomScreen.setText(timeLeft + " sec");
+        modeText.setText("TIMER");
+        valueText.setText(setTime + " sec");
+    }
 
-        fanStatus.setText("Fan: SPINNING");
-        heatStatus.setText("Heater: " + selectedTemp + " °C");
+    public void openTemperatureSetting() {
 
-        countdown = new Timeline(
-                new KeyFrame(Duration.seconds(1), e -> updateCooking())
+        if (!turnedOn) {
+            return;
+        }
+
+        adjusting = true;
+
+        modeText.setText("TEMP");
+        valueText.setText(setTemperature + " °C");
+    }
+
+    public void updateSetting(int direction) {
+
+        String selected = choices[choiceIndex];
+
+        if (selected.equals("TIMER")) {
+
+            setTime = setTime + direction;
+
+            if (setTime < 1) {
+                setTime = 1;
+            }
+
+            if (setTime > 60) {
+                setTime = 60;
+            }
+
+            valueText.setText(setTime + " sec");
+        }
+
+        if (selected.equals("TEMP")) {
+
+            setTemperature = setTemperature + (direction * 5);
+
+            if (setTemperature < 80) {
+                setTemperature = 80;
+            }
+
+            if (setTemperature > 200) {
+                setTemperature = 200;
+            }
+
+            valueText.setText(setTemperature + " °C");
+        }
+    }
+
+    public void saveAdjustment() {
+
+        String selected = choices[choiceIndex];
+
+        if (selected.equals("TIMER")) {
+            timerReady = true;
+            valueText.setText(setTime + " sec SET");
+        }
+
+        if (selected.equals("TEMP")) {
+            temperatureReady = true;
+            valueText.setText(setTemperature + " °C SET");
+        }
+
+        adjusting = false;
+
+        if (readyForCooking()) {
+            choiceIndex = 4;
+            modeText.setText("FRY");
+            valueText.setText("FRY");
+        }
+    }
+
+    public boolean readyForCooking() {
+        return turnedOn && timerReady && temperatureReady;
+    }
+
+    public void beginFrying() {
+
+        if (!readyForCooking()) {
+            return;
+        }
+
+        running = true;
+        adjusting = false;
+
+        remaining = setTime;
+        heaterTemperature = 25;
+
+        modeText.setText("FRY");
+        valueText.setText(remaining + " sec");
+
+        fanText.setText("Fan: SPINNING");
+        heaterText.setText("Heater: " + heaterTemperature + " °C");
+
+        if (remaining <= 5) {
+            startWarningFlash();
+        }
+
+        cookingClock = new Timeline(
+                new KeyFrame(
+                        Duration.seconds(1),
+                        e -> fryingStep()
+                )
         );
 
-        countdown.setCycleCount(Timeline.INDEFINITE);
-        countdown.play();
+        cookingClock.setCycleCount(Timeline.INDEFINITE);
+        cookingClock.play();
     }
 
-    public void updateCooking() {
+    public void fryingStep() {
 
-        timeLeft--;
+        remaining--;
 
-        bottomScreen.setText(timeLeft + " sec");
+        raiseHeater();
 
-        if (timeLeft <= 5 && timeLeft > 0 && blinking == null) {
-            beginBlueFlash();
+        valueText.setText(remaining + " sec");
+
+        if (remaining <= 5 && remaining > 0) {
+
+            if (warningClock == null) {
+                startWarningFlash();
+            }
         }
 
-        if (timeLeft <= 0) {
-            shutDown();
+        if (remaining <= 0) {
+            turnMachineOff();
         }
     }
 
-    public void beginBlueFlash() {
+    public void raiseHeater() {
 
-        blinking = new Timeline(
-                new KeyFrame(Duration.seconds(0.5), e -> switchFlashColor())
+        if (heaterTemperature < setTemperature) {
+
+            heaterTemperature += 10;
+
+            if (heaterTemperature > setTemperature) {
+                heaterTemperature = setTemperature;
+            }
+
+            heaterText.setText(
+                    "Heater: " + heaterTemperature + " °C"
+            );
+        }
+    }
+
+    public void startWarningFlash() {
+
+        warningClock = new Timeline(
+                new KeyFrame(
+                        Duration.seconds(0.5),
+                        e -> alternateScreenColor()
+                )
         );
 
-        blinking.setCycleCount(Timeline.INDEFINITE);
-        blinking.play();
+        warningClock.setCycleCount(Timeline.INDEFINITE);
+        warningClock.play();
     }
 
-    public void switchFlashColor() {
+    public void alternateScreenColor() {
 
-        if (blueScreen) {
-            redDisplay();
+        if (flashBlue) {
+            changeScreenColor("red");
         } else {
-            blueDisplay();
+            changeScreenColor("blue");
         }
 
-        blueScreen = !blueScreen;
+        flashBlue = !flashBlue;
     }
 
-    public void shutDown() {
+    public void stopIfNeeded() {
 
-        powered = false;
-        cooking = false;
-        timeConfirmed = false;
-        tempConfirmed = false;
-        blueScreen = false;
-
-        stopTimers();
-
-        currentOption = 1;
-
-        topScreen.setText("OFF");
-        bottomScreen.setText("OFF");
-
-        fanStatus.setText("Fan: OFF");
-        heatStatus.setText("Heater: OFF");
-
-        yellowDisplay();
-    }
-
-    public void stopTimers() {
-
-        if (countdown != null) {
-            countdown.stop();
-            countdown = null;
-        }
-
-        if (blinking != null) {
-            blinking.stop();
-            blinking = null;
+        if (turnedOn || running) {
+            turnMachineOff();
         }
     }
 
-    public void redDisplay() {
-        screen.setStyle(
-                "-fx-background-color: red;" +
-                "-fx-border-color: black;" +
-                "-fx-border-width: 3;"
-        );
+    public void turnMachineOff() {
+
+        stopTimelines();
+
+        turnedOn = false;
+        running = false;
+        adjusting = false;
+
+        timerReady = false;
+        temperatureReady = false;
+
+        flashBlue = false;
+
+        setTime = 1;
+        setTemperature = 80;
+        heaterTemperature = 25;
+
+        choiceIndex = 1;
+
+        modeText.setText("OFF");
+        valueText.setText("OFF");
+
+        fanText.setText("Fan: OFF");
+        heaterText.setText("Heater: OFF");
+
+        changeScreenColor("yellow");
     }
 
-    public void yellowDisplay() {
-        screen.setStyle(
-                "-fx-background-color: yellow;" +
-                "-fx-border-color: black;" +
-                "-fx-border-width: 3;"
-        );
+    public void stopTimelines() {
+
+        if (cookingClock != null) {
+            cookingClock.stop();
+            cookingClock = null;
+        }
+
+        if (warningClock != null) {
+            warningClock.stop();
+            warningClock = null;
+        }
     }
 
-    public void blueDisplay() {
-        screen.setStyle(
-                "-fx-background-color: blue;" +
+    public void changeScreenColor(String color) {
+
+        screenPanel.setStyle(
+                "-fx-background-color: " + color + ";" +
                 "-fx-border-color: black;" +
                 "-fx-border-width: 3;"
         );
