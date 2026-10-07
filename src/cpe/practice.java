@@ -1,279 +1,477 @@
-import javafx.animation.Animation;
-import javafx.animation.RotateTransition;
+package labex1;
+
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.*;
-import javafx.scene.transform.Rotate;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
-public class ElectricFanApp extends Application {
+public class AirFryerSimulator extends Application {
 
-    private RotateTransition rotation;
-    private Label statusLabel;
+    String[] options = {"ON", "OFF", "TIMER", "TEMP", "FRY"};
+
+    int currentOption = 0;
+    int selectedTime = 1;
+    int selectedTemp = 80;
+    int timeLeft;
+
+    boolean plugged = false;
+    boolean basketReady = false;
+    boolean powered = false;
+    boolean timeConfirmed = false;
+    boolean tempConfirmed = false;
+    boolean cooking = false;
+    boolean blueScreen = false;
+
+    Label topScreen = new Label();
+    Label bottomScreen = new Label();
+    Label fanStatus = new Label("Fan: OFF");
+    Label heatStatus = new Label("Heater: OFF");
+
+    VBox screen = new VBox();
+
+    Timeline countdown;
+    Timeline blinking;
 
     @Override
     public void start(Stage stage) {
-        Group fan = new Group();
 
-        Circle outerGuard = new Circle(200, 200, 155);
-        outerGuard.setFill(Color.TRANSPARENT);
-        outerGuard.setStroke(Color.DARKSLATEGRAY);
-        outerGuard.setStrokeWidth(12);
+        Label heading = new Label("AIR FRYER SIMULATOR");
+        heading.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
 
-        Circle innerGuard1 = new Circle(200, 200, 125);
-        innerGuard1.setFill(Color.TRANSPARENT);
-        innerGuard1.setStroke(Color.LIGHTGRAY);
-        innerGuard1.setStrokeWidth(3);
+        setupScreen();
 
-        Circle innerGuard2 = new Circle(200, 200, 85);
-        innerGuard2.setFill(Color.TRANSPARENT);
-        innerGuard2.setStroke(Color.LIGHTGRAY);
-        innerGuard2.setStrokeWidth(2);
+        Button decrease = new Button("-");
+        Button powerSelect = new Button("PWR/SEL");
+        Button increase = new Button("+");
 
-        Group blades = new Group();
+        decrease.setPrefSize(80, 50);
+        powerSelect.setPrefSize(100, 50);
+        increase.setPrefSize(80, 50);
 
-        for (int i = 0; i < 3; i++) {
-            Polygon blade = createBlade();
-            blade.setRotate(i * 120);
-            blades.getChildren().add(blade);
-        }
+        ToggleButton plugSwitch = new ToggleButton("Power Cord: OUT");
+        ToggleButton basketSwitch = new ToggleButton("Basket: OUT");
 
-        Circle hub = new Circle(200, 200, 25);
-        hub.setFill(Color.DARKSLATEGRAY);
-        hub.setStroke(Color.BLACK);
-        hub.setStrokeWidth(3);
+        plugSwitch.setPrefWidth(160);
+        basketSwitch.setPrefWidth(160);
 
-        Circle hubCenter = new Circle(200, 200, 9);
-        hubCenter.setFill(Color.LIGHTGRAY);
+        decrease.setOnAction(e -> pressMinus());
+        increase.setOnAction(e -> pressPlus());
+        powerSelect.setOnAction(e -> chooseOption());
 
-        fan.getChildren().addAll(
-                blades,
-                hub,
-                hubCenter,
-                innerGuard2,
-                innerGuard1,
-                outerGuard
+        plugSwitch.setOnAction(e -> {
+            plugged = plugSwitch.isSelected();
+
+            if (plugged) {
+                plugSwitch.setText("Power Cord: IN");
+            } else {
+                plugSwitch.setText("Power Cord: OUT");
+
+                if (powered) {
+                    shutDown();
+                }
+            }
+        });
+
+        basketSwitch.setOnAction(e -> {
+            basketReady = basketSwitch.isSelected();
+
+            if (basketReady) {
+                basketSwitch.setText("Basket: IN");
+            } else {
+                basketSwitch.setText("Basket: OUT");
+
+                if (powered) {
+                    shutDown();
+                }
+            }
+        });
+
+        HBox buttons = new HBox(10);
+        buttons.getChildren().addAll(decrease, powerSelect, increase);
+        buttons.setAlignment(Pos.CENTER);
+
+        HBox switches = new HBox(10);
+        switches.getChildren().addAll(plugSwitch, basketSwitch);
+        switches.setAlignment(Pos.CENTER);
+
+        HBox machineStatus = new HBox(30);
+        machineStatus.getChildren().addAll(fanStatus, heatStatus);
+        machineStatus.setAlignment(Pos.CENTER);
+
+        VBox layout = new VBox(20);
+        layout.getChildren().addAll(
+                heading,
+                screen,
+                buttons,
+                switches,
+                machineStatus
         );
 
-        Rectangle neck = new Rectangle(183, 350, 34, 65);
-        neck.setFill(Color.DARKSLATEGRAY);
-        neck.setArcWidth(12);
-        neck.setArcHeight(12);
+        layout.setAlignment(Pos.CENTER);
+        layout.setPadding(new Insets(30));
 
-        Rectangle base = new Rectangle(110, 405, 180, 45);
-        base.setFill(Color.DARKSLATEGRAY);
-        base.setArcWidth(25);
-        base.setArcHeight(25);
+        Scene scene = new Scene(layout, 450, 400);
 
-        statusLabel = new Label("POWER: OFF");
-        statusLabel.setStyle(
-                "-fx-font-size: 18px;" +
-                "-fx-font-weight: bold;" +
-                "-fx-text-fill: #333333;"
-        );
-
-        Button offButton = new Button("OFF");
-        Button lowButton = new Button("LOW");
-        Button medButton = new Button("MED");
-        Button hiButton = new Button("HI");
-
-        Button[] buttons = {
-                offButton, lowButton, medButton, hiButton
-        };
-
-        for (Button button : buttons) {
-            button.setPrefWidth(90);
-            button.setPrefHeight(45);
-            button.setStyle(
-                    "-fx-font-size: 14px;" +
-                    "-fx-font-weight: bold;"
-            );
-        }
-
-        offButton.setOnAction(e -> setFanSpeed(0));
-        lowButton.setOnAction(e -> setFanSpeed(1));
-        medButton.setOnAction(e -> setFanSpeed(2));
-        hiButton.setOnAction(e -> setFanSpeed(3));
-
-        HBox controls = new HBox(12);
-        controls.setAlignment(Pos.CENTER);
-        controls.getChildren().addAll(
-                offButton,
-                lowButton,
-                medButton,
-                hiButton
-        );
-
-        Circle powerIndicator = new Circle(8);
-        powerIndicator.setFill(Color.LIMEGREEN);
-
-        Label acLabel = new Label("AC POWER");
-        acLabel.setStyle("-fx-font-weight: bold;");
-
-        HBox powerBox = new HBox(8);
-        powerBox.setAlignment(Pos.CENTER);
-        powerBox.getChildren().addAll(powerIndicator, acLabel);
-
-        VBox root = new VBox(15);
-        root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(20));
-        root.setStyle("-fx-background-color: #F4F6F7;");
-
-        Label title = new Label("AC ELECTRIC FAN");
-        title.setStyle(
-                "-fx-font-size: 26px;" +
-                "-fx-font-weight: bold;" +
-                "-fx-text-fill: #263238;"
-        );
-
-        Label subtitle = new Label("3-Blade Abstract Model");
-        subtitle.setStyle(
-                "-fx-font-size: 14px;" +
-                "-fx-text-fill: #607D8B;"
-        );
-
-        Pane fanPane = new Pane();
-        fanPane.setPrefSize(400, 470);
-        fanPane.getChildren().addAll(
-                fan,
-                neck,
-                base
-        );
-
-        root.getChildren().addAll(
-                title,
-                subtitle,
-                fanPane,
-                statusLabel,
-                powerBox,
-                controls
-        );
-
-        Scene scene = new Scene(root, 500, 720);
-
-        stage.setTitle("AC Electric Fan - JavaFX");
+        stage.setTitle("Air Fryer");
         stage.setScene(scene);
-        stage.setResizable(false);
         stage.show();
 
-        setFanSpeed(0);
+        showCurrentOption();
     }
 
-    private Polygon createBlade() {
-        Polygon blade = new Polygon();
+    public void setupScreen() {
 
-        blade.getPoints().addAll(
-                200.0, 200.0,
-                185.0, 115.0,
-                205.0, 65.0,
-                235.0, 55.0,
-                225.0, 100.0,
-                215.0, 155.0
-        );
+        topScreen.setMaxWidth(Double.MAX_VALUE);
+        bottomScreen.setMaxWidth(Double.MAX_VALUE);
 
-        blade.setFill(Color.STEELBLUE);
-        blade.setStroke(Color.DARKSLATEGRAY);
-        blade.setStrokeWidth(2);
+        topScreen.setAlignment(Pos.CENTER_LEFT);
+        bottomScreen.setAlignment(Pos.CENTER);
 
-        return blade;
+        topScreen.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
+        bottomScreen.setStyle("-fx-font-size: 26px; -fx-font-weight: bold;");
+
+        screen.setPrefSize(300, 100);
+        screen.setPadding(new Insets(10));
+
+        screen.getChildren().addAll(topScreen, bottomScreen);
+
+        yellowDisplay();
     }
 
-    private void setFanSpeed(int speed) {
-        if (rotation != null) {
-            rotation.stop();
-        }
+    public void pressPlus() {
 
-        switch (speed) {
-            case 0:
-                statusLabel.setText("POWER: OFF");
-                break;
+        String option = options[currentOption];
 
-            case 1:
-                statusLabel.setText("POWER: ON  |  SPEED: LOW");
-                startRotation(1800);
-                break;
-
-            case 2:
-                statusLabel.setText("POWER: ON  |  SPEED: MED");
-                startRotation(900);
-                break;
-
-            case 3:
-                statusLabel.setText("POWER: ON  |  SPEED: HI");
-                startRotation(350);
-                break;
-
-            default:
-                statusLabel.setText("POWER: OFF");
+        if (!cooking && powered && option.equals("TIMER")) {
+            increaseTimer();
+        } else if (!cooking && powered && option.equals("TEMP")) {
+            increaseTemperature();
+        } else {
+            moveOption(1);
         }
     }
 
-    private void startRotation(double milliseconds) {
-        if (statusLabel.getScene() == null) {
+    public void pressMinus() {
+
+        String option = options[currentOption];
+
+        if (!cooking && powered && option.equals("TIMER")) {
+            decreaseTimer();
+        } else if (!cooking && powered && option.equals("TEMP")) {
+            decreaseTemperature();
+        } else {
+            moveOption(-1);
+        }
+    }
+
+    public void moveOption(int movement) {
+
+        currentOption += movement;
+
+        if (currentOption >= options.length) {
+            currentOption = 0;
+        }
+
+        if (currentOption < 0) {
+            currentOption = options.length - 1;
+        }
+
+        if (options[currentOption].equals("FRY") && !readyToFry()) {
+            moveOption(movement);
             return;
         }
 
-        Group bladeGroup = findBladeGroup(
-                statusLabel.getScene().getRoot()
-        );
+        showCurrentOption();
+    }
 
-        if (bladeGroup == null) {
+    public void showCurrentOption() {
+
+        String option = options[currentOption];
+
+        topScreen.setText(option);
+
+        if (cooking) {
+            bottomScreen.setText(timeLeft + " sec");
             return;
         }
 
-        rotation = new RotateTransition(
-                Duration.millis(milliseconds),
-                bladeGroup
-        );
+        switch (option) {
 
-        rotation.setAxis(Rotate.Z_AXIS);
-        rotation.setByAngle(360);
-        rotation.setCycleCount(Animation.INDEFINITE);
-        rotation.setInterpolator(
-                javafx.animation.Interpolator.LINEAR
-        );
+            case "ON":
+                if (powered) {
+                    bottomScreen.setText("ON");
+                } else {
+                    bottomScreen.setText("OFF");
+                }
+                break;
 
-        rotation.play();
+            case "OFF":
+                bottomScreen.setText("OFF");
+                break;
+
+            case "TIMER":
+                selectedTime = 1;
+                bottomScreen.setText(selectedTime + " sec");
+                break;
+
+            case "TEMP":
+                selectedTemp = 80;
+                bottomScreen.setText(selectedTemp + " °C");
+                break;
+
+            case "FRY":
+                bottomScreen.setText("FRY");
+                break;
+        }
     }
 
-    private Group findBladeGroup(javafx.scene.Node node) {
-        if (node instanceof Group) {
-            Group group = (Group) node;
+    public void chooseOption() {
 
-            if (!group.getChildren().isEmpty()
-                    && group.getChildren().get(0) instanceof Polygon) {
-                return group;
+        String choice = options[currentOption];
+
+        if (cooking) {
+            if (choice.equals("OFF")) {
+                shutDown();
             }
-
-            for (javafx.scene.Node child : group.getChildren()) {
-                Group result = findBladeGroup(child);
-
-                if (result != null) {
-                    return result;
-                }
-            }
+            return;
         }
 
-        if (node instanceof Pane) {
-            Pane pane = (Pane) node;
+        switch (choice) {
 
-            for (javafx.scene.Node child : pane.getChildren()) {
-                Group result = findBladeGroup(child);
+            case "ON":
+                powerOn();
+                break;
 
-                if (result != null) {
-                    return result;
-                }
-            }
+            case "OFF":
+                shutDown();
+                break;
+
+            case "TIMER":
+                confirmTimer();
+                break;
+
+            case "TEMP":
+                confirmTemperature();
+                break;
+
+            case "FRY":
+                beginCooking();
+                break;
+        }
+    }
+
+    public void powerOn() {
+
+        if (!plugged || !basketReady) {
+            bottomScreen.setText("CHECK PLUG/BASKET");
+            return;
         }
 
-        return null;
+        powered = true;
+
+        topScreen.setText("ON");
+        bottomScreen.setText("ON");
+
+        redDisplay();
+    }
+
+    public void confirmTimer() {
+
+        if (!powered) {
+            return;
+        }
+
+        timeConfirmed = true;
+        bottomScreen.setText(selectedTime + " sec SET");
+
+        goToFryIfReady();
+    }
+
+    public void confirmTemperature() {
+
+        if (!powered) {
+            return;
+        }
+
+        tempConfirmed = true;
+        bottomScreen.setText(selectedTemp + " °C SET");
+
+        goToFryIfReady();
+    }
+
+    public void goToFryIfReady() {
+
+        if (readyToFry()) {
+            currentOption = 4;
+            topScreen.setText("");
+            bottomScreen.setText("FRY");
+        }
+    }
+
+    public boolean readyToFry() {
+        return powered && timeConfirmed && tempConfirmed;
+    }
+
+    public void increaseTimer() {
+
+        if (selectedTime < 60) {
+            selectedTime++;
+        }
+
+        bottomScreen.setText(selectedTime + " sec");
+    }
+
+    public void decreaseTimer() {
+
+        if (selectedTime > 1) {
+            selectedTime--;
+        }
+
+        bottomScreen.setText(selectedTime + " sec");
+    }
+
+    public void increaseTemperature() {
+
+        if (selectedTemp < 200) {
+            selectedTemp += 5;
+        }
+
+        bottomScreen.setText(selectedTemp + " °C");
+    }
+
+    public void decreaseTemperature() {
+
+        if (selectedTemp > 80) {
+            selectedTemp -= 5;
+        }
+
+        bottomScreen.setText(selectedTemp + " °C");
+    }
+
+    public void beginCooking() {
+
+        if (!readyToFry()) {
+            return;
+        }
+
+        cooking = true;
+        timeLeft = selectedTime;
+
+        topScreen.setText("FRY");
+        bottomScreen.setText(timeLeft + " sec");
+
+        fanStatus.setText("Fan: SPINNING");
+        heatStatus.setText("Heater: " + selectedTemp + " °C");
+
+        countdown = new Timeline(
+                new KeyFrame(Duration.seconds(1), e -> updateCooking())
+        );
+
+        countdown.setCycleCount(Timeline.INDEFINITE);
+        countdown.play();
+    }
+
+    public void updateCooking() {
+
+        timeLeft--;
+
+        bottomScreen.setText(timeLeft + " sec");
+
+        if (timeLeft <= 5 && timeLeft > 0 && blinking == null) {
+            beginBlueFlash();
+        }
+
+        if (timeLeft <= 0) {
+            shutDown();
+        }
+    }
+
+    public void beginBlueFlash() {
+
+        blinking = new Timeline(
+                new KeyFrame(Duration.seconds(0.5), e -> switchFlashColor())
+        );
+
+        blinking.setCycleCount(Timeline.INDEFINITE);
+        blinking.play();
+    }
+
+    public void switchFlashColor() {
+
+        if (blueScreen) {
+            redDisplay();
+        } else {
+            blueDisplay();
+        }
+
+        blueScreen = !blueScreen;
+    }
+
+    public void shutDown() {
+
+        powered = false;
+        cooking = false;
+        timeConfirmed = false;
+        tempConfirmed = false;
+        blueScreen = false;
+
+        stopTimers();
+
+        currentOption = 1;
+
+        topScreen.setText("OFF");
+        bottomScreen.setText("OFF");
+
+        fanStatus.setText("Fan: OFF");
+        heatStatus.setText("Heater: OFF");
+
+        yellowDisplay();
+    }
+
+    public void stopTimers() {
+
+        if (countdown != null) {
+            countdown.stop();
+            countdown = null;
+        }
+
+        if (blinking != null) {
+            blinking.stop();
+            blinking = null;
+        }
+    }
+
+    public void redDisplay() {
+        screen.setStyle(
+                "-fx-background-color: red;" +
+                "-fx-border-color: black;" +
+                "-fx-border-width: 3;"
+        );
+    }
+
+    public void yellowDisplay() {
+        screen.setStyle(
+                "-fx-background-color: yellow;" +
+                "-fx-border-color: black;" +
+                "-fx-border-width: 3;"
+        );
+    }
+
+    public void blueDisplay() {
+        screen.setStyle(
+                "-fx-background-color: blue;" +
+                "-fx-border-color: black;" +
+                "-fx-border-width: 3;"
+        );
     }
 
     public static void main(String[] args) {
